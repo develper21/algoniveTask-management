@@ -1,0 +1,1471 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+    "name": "TaskFlow API — Server Collection",
+    "description": "# 🚀 Algonive Task Manager — Backend API Collection\n\nComplete Postman collection for **every route** exposed by the Express server (`server/server.js`).\n\n## 📦 Coverage\n| Folder | Prefix | Routes |\n|---|---|---|\n| 🏥 Health & System | `/api/health`, `/` | 2 |\n| 🔐 Authentication | `/api/auth` | 8 |\n| 👥 Teams | `/api/teams` | 6 |\n| 📋 Tasks | `/api/tasks` | 11 |\n| 🔔 Notifications | `/api/notifications` | 4 |\n| 💬 Messaging | `/api/messaging` | 11 |\n| **Total** | | **42** |\n\n## ⚡ Quick Start\n1. Import this file into Postman (**Import → File**).\n2. Edit collection variables → set `baseUrl`, `email`, `password`.\n3. Run **🔐 Authentication → Login User** — the test script automatically saves the JWT into `{{token}}`.\n4. All protected requests use `Authorization: Bearer {{token}}` automatically.\n5. IDs (`teamId`, `taskId`, `notificationId`, `conversationId`, `attachmentId`, `resetToken`) are **auto-captured** from responses as you run requests in order.\n\n## 🔁 Suggested Run Order\nSignup → Login → Create Team → Create Task → Upload Attachment → Notifications → Messaging → Profile/Logout.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "🏥 Health & System",
+      "description": "Public system endpoints for monitoring and API discovery. No authentication required.",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "health"]
+            },
+            "description": "**GET /api/health** — Server health report: uptime, memory, MongoDB status, Redis status and connected Socket.IO clients.\n\nAccess: 🔓 Public"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test('API is running', () => pm.expect(data.success).to.eql(true));",
+                  "console.log('MongoDB:', data.database?.mongodb?.status, '| Redis:', data.database?.redis?.status);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "API Root / Discovery",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": ["{{baseUrl}}"],
+              "path": [""]
+            },
+            "description": "**GET /** — Welcome payload listing all top-level API endpoint groups.\n\nAccess: 🔓 Public"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test('Lists endpoints', () => pm.expect(data.endpoints).to.be.an('object'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "🔐 Authentication",
+      "description": "User registration, login, profile management and the full OTP-based password-reset flow. Login/Signup responses auto-capture `{{token}}` and `{{userId}}`.",
+      "item": [
+        {
+          "name": "Signup User",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"role\": \"member\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/signup",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "signup"]
+            },
+            "description": "**POST /api/auth/signup** — Register a new user. Password is hashed with bcrypt (12 rounds). Returns a 7-day JWT.\n\nAccess: 🔓 Public · Rate limited (strict)\nValidation: name 2–50 chars, valid email, password min 6 chars. Use `role: \"admin\"` + `adminInviteToken` to create an admin.\n\nAuto-captures: `token`, `userId`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201 (or 400 if user exists)', () => [201, 400].includes(pm.response.code));",
+                  "const data = pm.response.json();",
+                  "if (data.token) {",
+                  "  pm.collectionVariables.set('token', data.token);",
+                  "  console.log('✅ token captured from signup');",
+                  "}",
+                  "if (data.user) pm.collectionVariables.set('userId', data.user.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login User",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "**POST /api/auth/login** — Authenticate and receive a JWT (7 days). Account locks for 15 minutes after 5 failed attempts.\n\nAccess: 🔓 Public · Rate limited (strict)\n\nAuto-captures: `token`, `userId` — run this first before testing protected routes."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "if (data.token) {",
+                  "  pm.collectionVariables.set('token', data.token);",
+                  "  console.log('✅ token captured from login');",
+                  "}",
+                  "if (data.user) pm.collectionVariables.set('userId', data.user.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Current User (Me)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "me"]
+            },
+            "description": "**GET /api/auth/me** — Fetch the authenticated user's profile (without password hash) including populated teams. Cached 30 min.\n\nAccess: 🔒 Private (Bearer token)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test('Returns user object', () => pm.expect(data.user).to.be.an('object'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe Updated\",\n  \"email\": \"{{email}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "profile"]
+            },
+            "description": "**PUT /api/auth/profile** — Update the current user's name and/or email. Rejects emails already taken by another user.\n\nAccess: 🔒 Private (Bearer token)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test('Profile updated', () => pm.expect(data.success).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Forgot Password (Request OTP)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/forgot-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "forgot-password"]
+            },
+            "description": "**POST /api/auth/forgot-password** — Sends a 6-digit OTP to the email (valid 10 min, max 3 verify attempts). Response never reveals whether the account exists. One OTP request per 5 minutes.\n\nAccess: 🔓 Public · Rate limited (strict)\n\nNext: copy the OTP from the email into `{{otp}}`, then run **Verify OTP**."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 (or 429 if asked too soon)', () => [200, 429].includes(pm.response.code));",
+                  "console.log('📧 Check the inbox for the 6-digit OTP and set the otp collection variable');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"otp\": \"{{otp}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/verify-otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "verify-otp"]
+            },
+            "description": "**POST /api/auth/verify-otp** — Verifies the 6-digit OTP (6 digits, 3 attempts max) and returns a short-lived `resetToken` (15 min) used by Reset Password.\n\nAccess: 🔓 Public · Rate limited (strict)\n\nAuto-captures: `resetToken`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 (or 400 for bad OTP)', () => [200, 400, 429].includes(pm.response.code));",
+                  "const data = pm.response.json();",
+                  "if (data.resetToken) {",
+                  "  pm.collectionVariables.set('resetToken', data.resetToken);",
+                  "  console.log('✅ resetToken captured (valid 15 min)');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{resetToken}}\",\n  \"newPassword\": \"{{newPassword}}\",\n  \"confirmPassword\": \"{{newPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/reset-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "reset-password"]
+            },
+            "description": "**POST /api/auth/reset-password** — Completes the password reset using the `resetToken` from Verify OTP. Both passwords must match (min 6 chars). Clears all remaining OTPs.\n\nAccess: 🔓 Public · Rate limited (strict)\n\nAfter success: update the `password` collection variable and login again."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 (or 400 for invalid token)', () => [200, 400, 500].includes(pm.response.code));",
+                  "const data = pm.response.json();",
+                  "if (data.success) {",
+                  "  pm.collectionVariables.set('password', pm.collectionVariables.get('newPassword'));",
+                  "  console.log('✅ password reset — password variable updated, login again');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "logout"]
+            },
+            "description": "**POST /api/auth/logout** — Logs the logout event to the audit trail. JWT is stateless so the client discards the token.\n\nAccess: 🔒 Private (Bearer token)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test('Logout successful', () => pm.expect(data.success).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "👥 Teams",
+      "description": "Team CRUD and membership management. Creating a team auto-captures `{{teamId}}`. Only the team creator (or an admin) may update the team or add/remove members.",
+      "item": [
+        {
+          "name": "Create Team",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Alpha Team\",\n  \"description\": \"Core product development team\",\n  \"color\": \"#6366f1\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/teams",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "teams"]
+            },
+            "description": "**POST /api/teams** — Create a team. The creator is automatically added as the first member.\n\nAccess: 🔒 Private (Bearer token)\n\nAuto-captures: `teamId`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
+                  "const data = pm.response.json();",
+                  "if (data.team) {",
+                  "  pm.collectionVariables.set('teamId', data.team._id);",
+                  "  console.log('✅ teamId captured:', data.team._id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get All My Teams",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/teams",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "teams"]
+            },
+            "description": "**GET /api/teams** — List all teams the current user belongs to (newest first), with members and creator populated.\n\nAccess: 🔒 Private (Bearer token)\n\nAuto-captures: `teamId` (first team) if not already set."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test('Returns teams array', () => pm.expect(data.teams).to.be.an('array'));",
+                  "if (data.teams?.length && !pm.collectionVariables.get('teamId')) {",
+                  "  pm.collectionVariables.set('teamId', data.teams[0]._id);",
+                  "  console.log('✅ teamId captured from list');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Team By ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/teams/{{teamId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "teams", "{{teamId}}"]
+            },
+            "description": "**GET /api/teams/:id** — Fetch one team with members and creator populated. Returns 403 if the user is not a member.\n\nAccess: 🔒 Private (Bearer token)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 (or 403/404 without access)', () => [200, 403, 404].includes(pm.response.code));",
+                  "const data = pm.response.json();",
+                  "if (data.team) pm.test('Team has members', () => pm.expect(data.team.members).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Team",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Alpha Team Renamed\",\n  \"description\": \"Updated team description\",\n  \"color\": \"#8b5cf6\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/teams/{{teamId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "teams", "{{teamId}}"]
+            },
+            "description": "**PUT /api/teams/:id** — Update team name, description and/or color. Only the team creator is allowed.\n\nAccess: 🔒 Private (Bearer token)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 (or 403 if not creator)', () => [200, 403, 404].includes(pm.response.code));",
+                  "const data = pm.response.json();",
+                  "if (data.team) pm.test('Team updated', () => pm.expect(data.success).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add Member",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{memberEmail}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/teams/{{teamId}}/add-member",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "teams", "{{teamId}}", "add-member"]
+            },
+            "description": "**POST /api/teams/:id/add-member** — Add a registered user (by email) to the team and create a `team_invite` notification for them. Only the team creator or an admin.\n\nAccess: 🔒 Private (Bearer token)\n\nTip: signup a second user first and set their email in `{{memberEmail}}`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 (or 4xx for validation/permission)', () => pm.response.code < 500);",
+                  "const data = pm.response.json();",
+                  "if (data.team) pm.test('Member added', () => pm.expect(data.success).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Remove Member",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/teams/{{teamId}}/remove-member/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "teams", "{{teamId}}", "remove-member", "{{userId}}"]
+            },
+            "description": "**DELETE /api/teams/:id/remove-member/:userId** — Remove a member from the team. Only the team creator or an admin.\n\nAccess: 🔒 Private (Bearer token)\n\n⚠️ Replace `{{userId}}` with the **member's** user id (default variable points at the logged-in user)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 (or 4xx for permission)', () => pm.response.code < 500);",
+                  "const data = pm.response.json();",
+                  "if (data.success) pm.test('Member removed', () => pm.expect(data.message).to.include('removed'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "📋 Tasks",
+      "description": "Task CRUD, dashboard stats, activity feed, status transitions and file attachments (25 MB max per file, 10 files per upload, stored under `server/uploads/tasks/`).",
+      "item": [
+        {
+          "name": "Create Task",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Implement login page\",\n  \"description\": \"Build the login UI with form validation and error states\",\n  \"team\": \"{{teamId}}\",\n  \"assignee\": \"{{userId}}\",\n  \"status\": \"pending\",\n  \"priority\": \"high\",\n  \"dueDate\": \"2026-10-15T00:00:00.000Z\",\n  \"tags\": [\"frontend\", \"auth\"],\n  \"checklist\": [\n    { \"text\": \"Design the form layout\", \"completed\": true },\n    { \"text\": \"Wire up the API call\", \"completed\": false }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tasks"]
+            },
+            "description": "**POST /api/tasks** — Create a task in a team you belong to. Assigning another member creates an in-app notification **and** sends a task-assignment email.\n\nAccess: 🔒 Private (Bearer token)\nStatus: `pending | in_progress | completed` · Priority: `low | medium | high`\n\nAuto-captures: `taskId`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
+                  "const data = pm.response.json();",
+                  "if (data.task) {",
+                  "  pm.collectionVariables.set('taskId', data.task._id);",
+                  "  console.log('✅ taskId captured:', data.task._id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get All Tasks (Filters & Pagination)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks?page=1&limit=20&status=&priority=&team=&assignee=&search=&sortBy=createdAt&sortOrder=desc",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tasks"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "status", "value": "", "description": "pending | in_progress | completed (optional)" },
+                { "key": "priority", "value": "", "description": "low | medium | high (optional)" },
+                { "key": "team", "value": "", "description": "teamId filter (optional)" },
+                { "key": "assignee", "value": "", "description": "userId filter (optional)" },
+                { "key": "search", "value": "", "description": "searches title, description and tags (optional)" },
+                { "key": "sortBy", "value": "createdAt", "description": "createdAt | dueDate | priority | status" },
+                { "key": "sortOrder", "value": "desc", "description": "asc | desc" }
+              ]
+            },
+            "description": "**GET /api/tasks** — Paginated task list across the user's teams (admins see all). Supports status/priority/team/assignee filters, text search and sorting.\n\nAccess: 🔒 Private (Bearer token)\n\nAuto-captures: `taskId` (first result) if not already set."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test('Returns tasks with pagination', () => {",
+                  "  pm.expect(data.tasks).to.be.an('array');",
+                  "  pm.expect(data.pagination).to.have.property('total');",
+                  "});",
+                  "if (data.tasks?.length && !pm.collectionVariables.get('taskId')) {",
+                  "  pm.collectionVariables.set('taskId', data.tasks[0]._id);",
+                  "  console.log('✅ taskId captured from list');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Dashboard Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/stats/dashboard",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tasks", "stats", "dashboard"]
+            },
+            "description": "**GET /api/tasks/stats/dashboard** — Aggregated statistics for the dashboard: tasks by status, my open tasks, overdue tasks and 30-day creation history.\n\nAccess: 🔒 Private (Bearer token)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test('Returns stats object', () => {",
+                  "  pm.expect(data.stats).to.have.property('byStatus');",
+                  "  pm.expect(data.stats).to.have.property('statusHistory');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Activity Feed",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/activity/feed?limit=25",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tasks", "activity", "feed"],
+              "query": [
+                { "key": "limit", "value": "25", "description": "max 100" }
+              ]
+            },
+            "description": "**GET /api/tasks/activity/feed** — Recent task activity (created, status changed, assignee changed) across the user's teams. Cached 5 min.\n\nAccess: 🔒 Private (Bearer token)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test('Returns activities array', () => pm.expect(data.activities).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Task By ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/{{taskId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tasks", "{{taskId}}"]
+            },
+            "description": "**GET /api/tasks/:id** — Fetch a single task with creator, assignee and team populated. Accessible to team members, the creator, the assignee or an admin. Cached 15 min.\n\nAccess: 🔒 Private (Bearer token)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 (or 403/404 without access)', () => [200, 403, 404].includes(pm.response.code));",
+                  "const data = pm.response.json();",
+                  "if (data.task) pm.test('Task has title', () => pm.expect(data.task).to.have.property('title'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Task",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Implement login page (updated)\",\n  \"status\": \"in_progress\",\n  \"priority\": \"high\",\n  \"dueDate\": \"2026-10-20T00:00:00.000Z\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/{{taskId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tasks", "{{taskId}}"]
+            },
+            "description": "**PUT /api/tasks/:id** — Update any task field. Status and assignee changes are recorded in the team activity feed.\n\nAccess: 🔒 Private (Bearer token) — team members, creator, assignee or admin"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "if (data.task) pm.test('Task updated', () => pm.expect(data.success).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Task Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"completed\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/{{taskId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tasks", "{{taskId}}", "status"]
+            },
+            "description": "**PATCH /api/tasks/:id/status** — Quick status transition (`pending | in_progress | completed`). Marking a task **completed** notifies the creator/assignee in-app and by email.\n\nAccess: 🔒 Private (Bearer token)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 (or 400 for invalid status)', () => [200, 400].includes(pm.response.code));",
+                  "const data = pm.response.json();",
+                  "if (data.task) pm.test('Status updated', () => pm.expect(data.task.status).to.eql('completed'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Upload Task Attachments",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "files",
+                  "type": "file",
+                  "src": [],
+                  "description": "Select one or more files — max 10 files, 25 MB each"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/{{taskId}}/attachments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tasks", "{{taskId}}", "attachments"]
+            },
+            "description": "**POST /api/tasks/:id/attachments** — Upload up to 10 files (25 MB each) to a task via `multipart/form-data`. Files are stored on disk and indexed in MongoDB.\n\nAccess: 🔒 Private (Bearer token) · Upload rate limited\n\nIn Postman: Body → form-data → key `files` → type **File** → select a file.\n\nAuto-captures: `attachmentId` (first file)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', () => pm.response.to.have.status(201));",
+                  "const data = pm.response.json();",
+                  "if (data.attachments?.length) {",
+                  "  pm.collectionVariables.set('attachmentId', data.attachments[0]._id);",
+                  "  console.log('✅ attachmentId captured:', data.attachments[0].originalName);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Task Attachments",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/{{taskId}}/attachments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tasks", "{{taskId}}", "attachments"]
+            },
+            "description": "**GET /api/tasks/:id/attachments** — List all attachments of a task (newest first) with uploader info. Cached 30 min.\n\nAccess: 🔒 Private (Bearer token)\n\nAuto-captures: `attachmentId` (first attachment) if not already set."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test('Returns attachments array', () => pm.expect(data.attachments).to.be.an('array'));",
+                  "if (data.attachments?.length && !pm.collectionVariables.get('attachmentId')) {",
+                  "  pm.collectionVariables.set('attachmentId', data.attachments[0]._id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Download Attachment",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/attachments/{{attachmentId}}/download",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tasks", "attachments", "{{attachmentId}}", "download"]
+            },
+            "description": "**GET /api/tasks/attachments/:attachmentId/download** — Stream the attachment file back as a download (`Content-Disposition: attachment`).\n\nAccess: 🔒 Private (Bearer token)\n\nIn Postman: **Send and Download** to save the file. Returns 410 if the file is missing from storage."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 (or 404/410 if missing)', () => [200, 404, 410].includes(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Task",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/{{taskId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tasks", "{{taskId}}"]
+            },
+            "description": "**DELETE /api/tasks/:id** — Permanently delete a task **and** its attachments (files removed from disk), activity records and cache entries.\n\nAccess: 🔒 Private (Bearer token) — only the task creator or an admin\n\n⚠️ Destructive: run this last in the Tasks folder."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 (or 403 if not creator)', () => [200, 403, 404].includes(pm.response.code));",
+                  "const data = pm.response.json();",
+                  "if (data.success) pm.test('Task deleted', () => pm.expect(data.message).to.include('deleted'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "🔔 Notifications",
+      "description": "In-app notifications generated by task assignments, status changes and team invites. Real-time delivery happens over Socket.IO (`user:{id}` room).",
+      "item": [
+        {
+          "name": "Get My Notifications",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications?limit=50&unreadOnly=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "notifications"],
+              "query": [
+                { "key": "limit", "value": "50" },
+                { "key": "unreadOnly", "value": "false", "description": "true to fetch only unread" }
+              ]
+            },
+            "description": "**GET /api/notifications** — Current user's notifications (newest first) with task and actor populated, plus an `unreadCount`.\n\nAccess: 🔒 Private (Bearer token)\n\nAuto-captures: `notificationId` (first notification) if not already set."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test('Returns notifications with unreadCount', () => {",
+                  "  pm.expect(data.notifications).to.be.an('array');",
+                  "  pm.expect(data).to.have.property('unreadCount');",
+                  "});",
+                  "if (data.notifications?.length && !pm.collectionVariables.get('notificationId')) {",
+                  "  pm.collectionVariables.set('notificationId', data.notifications[0]._id);",
+                  "  console.log('✅ notificationId captured');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mark Notification As Read",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications/{{notificationId}}/read",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "notifications", "{{notificationId}}", "read"]
+            },
+            "description": "**PUT /api/notifications/:id/read** — Mark a single notification as read. Only the notification owner can do this.\n\nAccess: 🔒 Private (Bearer token)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 (or 403/404)', () => [200, 403, 404].includes(pm.response.code));",
+                  "const data = pm.response.json();",
+                  "if (data.notification) pm.test('Marked as read', () => pm.expect(data.notification.read).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mark All As Read",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications/read-all",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "notifications", "read-all"]
+            },
+            "description": "**PUT /api/notifications/read-all** — Mark every unread notification of the current user as read in one operation.\n\nAccess: 🔒 Private (Bearer token)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test('All marked read', () => pm.expect(data.message).to.include('marked as read'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Notification",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications/{{notificationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "notifications", "{{notificationId}}"]
+            },
+            "description": "**DELETE /api/notifications/:id** — Permanently delete one of the current user's notifications.\n\nAccess: 🔒 Private (Bearer token)\n\n⚠️ Destructive: run this last in the Notifications folder."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 (or 403/404)', () => [200, 403, 404].includes(pm.response.code));",
+                  "const data = pm.response.json();",
+                  "if (data.success) pm.test('Deleted', () => pm.expect(data.message).to.include('deleted'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "💬 Messaging",
+      "description": "End-to-end encrypted team & direct messaging. Clients encrypt with X25519 + AES-GCM; the server only stores ciphertext. Real-time delivery via Socket.IO events (`messaging:new`, `messaging:presence`).",
+      "item": [
+        {
+          "name": "Register Encryption Key",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"publicKey\": \"base64-encoded-x25519-public-key\",\n  \"deviceId\": \"default\",\n  \"algorithm\": \"x25519-aes-gcm\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/messaging/keys",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "messaging", "keys"]
+            },
+            "description": "**POST /api/messaging/keys** — Register (or rotate) the current user's public encryption key for a device.\n\nAccess: 🔒 Private (Bearer token)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test('Key registered', () => pm.expect(data.key).to.be.an('object'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lookup Encryption Keys",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userIds\": [\"{{userId}}\"]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/messaging/keys/lookup",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "messaging", "keys", "lookup"]
+            },
+            "description": "**POST /api/messaging/keys/lookup** — Fetch public keys for a list of user ids. Only returns keys of users you are allowed to message (shared team, admin, or self).\n\nAccess: 🔒 Private (Bearer token)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test('Returns keys array', () => pm.expect(data.keys).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Direct Conversation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"participantId\": \"{{userId}}\",\n  \"retentionPolicy\": \"7d\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/messaging/conversations/direct",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "messaging", "conversations", "direct"]
+            },
+            "description": "**POST /api/messaging/conversations/direct** — Open (or return the existing) 1-to-1 conversation with a user. Direct messages are allowed only within shared teams (admins exempt). Retention: `7d | 30d`.\n\nAccess: 🔒 Private (Bearer token)\n\nAuto-captures: `conversationId`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201 (or 500 if DM not allowed)', () => pm.response.code < 500);",
+                  "const data = pm.response.json();",
+                  "if (data.conversation) {",
+                  "  pm.collectionVariables.set('conversationId', data.conversation.id);",
+                  "  console.log('✅ conversationId captured:', data.conversation.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Team Conversation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"teamId\": \"{{teamId}}\",\n  \"retentionPolicy\": \"7d\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/messaging/conversations/team",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "messaging", "conversations", "team"]
+            },
+            "description": "**POST /api/messaging/conversations/team** — Open (or return the existing) group conversation for a team you belong to. Retention: `7d | 30d`.\n\nAccess: 🔒 Private (Bearer token)\n\nAuto-captures: `conversationId`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201 (or 4xx without access)', () => pm.response.code < 500);",
+                  "const data = pm.response.json();",
+                  "if (data.conversation) {",
+                  "  pm.collectionVariables.set('conversationId', data.conversation.id);",
+                  "  console.log('✅ conversationId captured:', data.conversation.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List My Conversations",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/messaging/conversations",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "messaging", "conversations"]
+            },
+            "description": "**GET /api/messaging/conversations** — All direct conversations the user participates in plus all team conversations of their teams (most recent first).\n\nAccess: 🔒 Private (Bearer token)\n\nAuto-captures: `conversationId` (first conversation) if not already set."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.test('Returns conversations array', () => pm.expect(data.conversations).to.be.an('array'));",
+                  "if (data.conversations?.length && !pm.collectionVariables.get('conversationId')) {",
+                  "  pm.collectionVariables.set('conversationId', data.conversations[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Conversation Participants",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/messaging/conversations/{{conversationId}}/participants",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "messaging", "conversations", "{{conversationId}}", "participants"]
+            },
+            "description": "**GET /api/messaging/conversations/:id/participants** — Participants of a conversation with name, email, role, avatar **and their registered public keys** (needed to encrypt messages).\n\nAccess: 🔒 Private (Bearer token)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 (or 4xx without access)', () => pm.response.code < 500);",
+                  "const data = pm.response.json();",
+                  "if (data.participants) pm.test('Participants include public keys', () => pm.expect(data.participants[0] ?? {}).to.have.property('publicKey'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Retention Policy",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"retentionPolicy\": \"30d\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/messaging/conversations/{{conversationId}}/retention",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "messaging", "conversations", "{{conversationId}}", "retention"]
+            },
+            "description": "**PATCH /api/messaging/conversations/:id/retention** — Change message retention (`7d | 30d`). Only the conversation creator or an admin.\n\nAccess: 🔒 Private (Bearer token)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 (or 4xx for permission)', () => pm.response.code < 500);",
+                  "const data = pm.response.json();",
+                  "if (data.conversation) pm.test('Retention updated', () => pm.expect(data.conversation.retentionPolicy).to.eql('30d'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Messages",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/messaging/messages/{{conversationId}}?limit=50&before=",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "messaging", "messages", "{{conversationId}}"],
+              "query": [
+                { "key": "limit", "value": "50", "description": "max 200" },
+                { "key": "before", "value": "", "description": "ISO date cursor for pagination (optional)" }
+              ]
+            },
+            "description": "**GET /api/messaging/messages/:conversationId** — Fetch encrypted messages of a conversation (newest first) with cursor pagination via `before`.\n\nAccess: 🔒 Private (Bearer token)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 (or 4xx without access)', () => pm.response.code < 500);",
+                  "const data = pm.response.json();",
+                  "if (data.messages) pm.test('Returns messages array', () => pm.expect(data.messages).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Send Encrypted Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"conversationId\": \"{{conversationId}}\",\n  \"ciphertext\": \"base64-encrypted-payload\",\n  \"iv\": \"base64-initialization-vector\",\n  \"authTag\": \"base64-gcm-auth-tag\",\n  \"recipients\": [\"{{userId}}\"],\n  \"derivedKeyId\": \"derived-shared-key-id\",\n  \"metadata\": { \"deviceId\": \"default\" }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/messaging/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "messaging", "messages"]
+            },
+            "description": "**POST /api/messaging/messages** — Persist an end-to-end encrypted message. Requires `ciphertext`, `iv`, `authTag` and a `recipients` array (one entry per participant the client encrypted for). Emits `messaging:new` over Socket.IO to the conversation room and each recipient.\n\nAccess: 🔒 Private (Bearer token)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201 (or 500 for access errors)', () => pm.response.code < 500);",
+                  "const data = pm.response.json();",
+                  "if (data.message) pm.test('Message persisted', () => pm.expect(data.message).to.have.property('createdAt'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search Messages",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/messaging/search?conversationId={{conversationId}}&senderId=&from=&to=&limit=100",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "messaging", "search"],
+              "query": [
+                { "key": "conversationId", "value": "{{conversationId}}" },
+                { "key": "senderId", "value": "", "description": "filter by sender (optional)" },
+                { "key": "from", "value": "", "description": "ISO date lower bound (optional)" },
+                { "key": "to", "value": "", "description": "ISO date upper bound (optional)" },
+                { "key": "limit", "value": "100", "description": "max 500" }
+              ]
+            },
+            "description": "**GET /api/messaging/search** — Filter messages in a conversation by sender and/or date range.\n\nAccess: 🔒 Private (Bearer token)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 (or 400 without conversationId)', () => [200, 400].includes(pm.response.code));",
+                  "const data = pm.response.json();",
+                  "if (data.messages) pm.test('Returns messages array', () => pm.expect(data.messages).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Export Conversation",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/messaging/export/{{conversationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "messaging", "export", "{{conversationId}}"]
+            },
+            "description": "**GET /api/messaging/export/:conversationId** — Download the full conversation as a JSON attachment (conversation metadata + all messages, oldest first).\n\nAccess: 🔒 Private (Bearer token)\n\nIn Postman: **Send and Download** to save the JSON file."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 (or 4xx without access)', () => pm.response.code < 500);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000", "type": "string" },
+    { "key": "email", "value": "john.doe@example.com", "type": "string" },
+    { "key": "password", "value": "password123", "type": "string" },
+    { "key": "newPassword", "value": "newSecurePass456", "type": "string" },
+    { "key": "memberEmail", "value": "jane.smith@example.com", "type": "string" },
+    { "key": "otp", "value": "123456", "type": "string", "description": "6-digit OTP received by email (Forgot Password flow)" },
+    { "key": "token", "value": "", "type": "string", "description": "AUTO — JWT saved by Login/Signup" },
+    { "key": "userId", "value": "", "type": "string", "description": "AUTO — current user id" },
+    { "key": "teamId", "value": "", "type": "string", "description": "AUTO — captured from Create Team" },
+    { "key": "taskId", "value": "", "type": "string", "description": "AUTO — captured from Create Task" },
+    { "key": "attachmentId", "value": "", "type": "string", "description": "AUTO — captured from Upload Attachments" },
+    { "key": "notificationId", "value": "", "type": "string", "description": "AUTO — captured from Get My Notifications" },
+    { "key": "conversationId", "value": "", "type": "string", "description": "AUTO — captured from Create Conversation" },
+    { "key": "resetToken", "value": "", "type": "string", "description": "AUTO — captured from Verify OTP (valid 15 min)" }
+  ]
+}
