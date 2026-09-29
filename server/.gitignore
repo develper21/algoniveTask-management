@@ -4,3 +4,5 @@ node_modules/
 *.log
 /uploads
 /user.txt
+.env.local
+.env.production
