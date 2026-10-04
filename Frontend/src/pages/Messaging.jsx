@@ -138,7 +138,9 @@ const Messaging = () => {
     try {
       await sendEncryptedMessage(activeConversationId, messageInput.trim());
       setMessageInput("");
-    } catch (error) {}
+    } catch (error) {
+      // Encryption/send failures are surfaced by the messaging context toasts
+    }
   };
 
   const handleCreateDirectConversation = async () => {
