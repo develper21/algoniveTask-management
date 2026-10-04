@@ -1,0 +1,24 @@
+.freebuff
+.idea
+.vscode
+*.iml
+
+# Dependencies
+node_modules/
+
+# Environment secrets
+.env
+.env.local
+.env.*.local
+
+# Build output
+Frontend/dist/
+Frontend/coverage/
+
+# Logs & uploads
+logs/
+*.log
+server/uploads/
+
+# OS junk
+.DS_Store
